@@ -2,14 +2,16 @@
 // Modular, extensible, and GitHub Pages ready
 
 
-const CANVAS_BG = '#F0EAD6';
-const EARTH_COLOR = '#5D4037';
-const FOSSIL_COLOR = '#888888';
+const CANVAS_BG = '#f2efe9';
+const EARTH_COLOR = '#232323'; // deep charcoal
+const PLANT_GREEN = '#2e4632'; // organic green
+const FOSSIL_COLOR = '#b0b0b0';
 const FPS = 60;
 const IDLE_TIME = 5000; // ms
 const FOSSIL_OPACITY = 0.13;
-const GROOVE_COLOR = 'rgba(93,64,55,0.18)';
-const GROOVE_WIDTH = 18;
+const GROOVE_COLOR = 'rgba(180, 170, 140, 0.18)';
+const GROOVE_WIDTH = 32;
+const GROOVE_SOFT = 0.13;
 const FADE_IN_TIME = 1200;
 
 
@@ -63,32 +65,41 @@ class Plant {
   }
 }
 
-// --- L-System Fractal Plant ---
-class LSystemPlant extends Plant {
+// --- Recursive Branching Stalk Plant ---
+class StalkPlant extends Plant {
   constructor(x, y) {
     super(x, y);
-    this.lsys = this.generateLSystem();
+    this.segments = [];
     this.growth = 0; // 0..1
-    this.growSpeed = randomBetween(0.012, 0.022); // meditative
-    this.leafColor = `hsl(${randomBetween(90, 140)}, 32%, 38%)`;
-    this.branchColor = EARTH_COLOR;
+    this.growSpeed = randomBetween(0.012, 0.018);
+    this.branchColor = Math.random() < 0.5 ? EARTH_COLOR : PLANT_GREEN;
     this.maxDepth = 5;
-    this.leafSize = randomBetween(7, 13);
+    this.branchEvery = 20;
+    this.angleSpread = [20, 45];
+    this.branchData = null;
+    this._initBranch();
   }
-  generateLSystem() {
-    // Simple L-system: F -> FF-[-F+F+F]+[+F-F-F]
-    let axiom = 'F';
-    let rules = [{pre: 'F', post: 'FF-[-F+F+F]+[+F-F-F]'}];
-    let str = axiom;
-    for (let i = 0; i < this.maxDepth; ++i) {
-      let next = '';
-      for (let c of str) {
-        let rule = rules.find(r => r.pre === c);
-        next += rule ? rule.post : c;
+  _initBranch() {
+    // Precompute the recursive structure
+    this.branchData = this._growBranch(0, 0, -Math.PI/2, 0);
+  }
+  _growBranch(x, y, angle, depth) {
+    if (depth > this.maxDepth) return null;
+    let len = 20 + randomBetween(-2, 2);
+    let segs = [{x, y, angle, depth}];
+    let px = x, py = y;
+    let children = [];
+    for (let d = 0; d < len; d += this.branchEvery) {
+      px += Math.cos(angle) * this.branchEvery;
+      py += Math.sin(angle) * this.branchEvery;
+      segs.push({x: px, y: py, angle, depth});
+      if (depth < this.maxDepth && Math.random() < 0.5) {
+        let branchAngle = angle + (Math.random() < 0.5 ? 1 : -1) * randomBetween(...this.angleSpread) * Math.PI/180;
+        let child = this._growBranch(px, py, branchAngle, depth+1);
+        if (child) children.push(child);
       }
-      str = next;
     }
-    return str;
+    return {segs, children};
   }
   update(dt) {
     super.update(dt);
@@ -103,76 +114,58 @@ class LSystemPlant extends Plant {
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(this.sway * 0.2);
-    let stack = [];
-    let len = 32;
-    let angle = Math.PI / 7;
-    let drawn = 0, maxDraw = Math.floor(this.lsys.length * this.growth);
     ctx.globalAlpha = fossil ? FOSSIL_OPACITY : 1;
     ctx.strokeStyle = fossil ? FOSSIL_COLOR : this.branchColor;
-    ctx.lineWidth = fossil ? 1.2 : 2.2;
+    ctx.lineWidth = fossil ? 1.1 : 2.2;
+    this._drawBranch(ctx, this.branchData, this.growth);
+    ctx.restore();
+  }
+  _drawBranch(ctx, branch, growth) {
+    if (!branch) return;
+    let segs = branch.segs;
+    let maxSeg = Math.floor(segs.length * growth);
     ctx.beginPath();
-    ctx.moveTo(0, 0);
-    for (let i = 0; i < this.lsys.length && drawn < maxDraw; ++i) {
-      let c = this.lsys[i];
-      if (c === 'F') {
-        ctx.lineTo(0, -len);
-        ctx.translate(0, -len);
-        drawn++;
-      } else if (c === '+') {
-        ctx.rotate(angle + randomBetween(-0.04, 0.04));
-      } else if (c === '-') {
-        ctx.rotate(-angle + randomBetween(-0.04, 0.04));
-      } else if (c === '[') {
-        stack.push([ctx.getTransform()]);
-      } else if (c === ']') {
-        ctx.setTransform(...stack.pop()[0]);
-      }
+    ctx.moveTo(segs[0].x, segs[0].y);
+    for (let i = 1; i < maxSeg; ++i) {
+      ctx.lineTo(segs[i].x, segs[i].y);
     }
     ctx.stroke();
-    // Draw leaves at tips
-    if (!fossil && this.growth > 0.7) {
-      ctx.save();
-      ctx.globalAlpha = 0.7;
-      ctx.fillStyle = this.leafColor;
-      for (let i = 0; i < this.lsys.length && i < maxDraw; ++i) {
-        if (this.lsys[i] === 'F' && (i+1 === this.lsys.length || this.lsys[i+1] !== 'F')) {
-          ctx.beginPath();
-          ctx.arc(0, 0, this.leafSize, 0, 2 * Math.PI);
-          ctx.fill();
-        }
-      }
-      ctx.restore();
+    // Draw children
+    for (let child of branch.children) {
+      this._drawBranch(ctx, child, growth);
     }
-    ctx.restore();
   }
   interact(type, data) {
     super.interact(type, data);
-    // Sway all branches if raked nearby
     if (type === 'rake') {
       this.swayTarget += (Math.random() - 0.5) * 0.5;
     }
   }
   toJSON() {
-    return {...super.toJSON(), lsys: this.lsys, growth: this.growth, leafColor: this.leafColor, branchColor: this.branchColor, maxDepth: this.maxDepth, leafSize: this.leafSize};
+    return {...super.toJSON(), branchColor: this.branchColor, maxDepth: this.maxDepth, branchEvery: this.branchEvery, angleSpread: this.angleSpread};
   }
   static fromJSON(obj) {
-    let p = new LSystemPlant(obj.x, obj.y);
-    p.lsys = obj.lsys;
-    p.growth = 1; // Fossils are fully grown
-    p.leafColor = obj.leafColor;
+    let p = new StalkPlant(obj.x, obj.y);
     p.branchColor = obj.branchColor;
     p.maxDepth = obj.maxDepth;
-    p.leafSize = obj.leafSize;
+    p.branchEvery = obj.branchEvery;
+    p.angleSpread = obj.angleSpread;
+    p.growth = 1;
     p.done = true;
+    p._initBranch();
     return p;
   }
 }
-plantTypes.push(LSystemPlant);
+plantTypes.length = 0;
+plantTypes.push(StalkPlant);
 
 // --- App State ---
 
 let canvas, ctx, width, height;
 let grooveCanvas, grooveCtx;
+let grooveLast = null;
+let grooveBrushImg = null;
+let sandParticles = [];
 let plants = [];
 let fossils = [];
 let lastCursor = {x: 0, y: 0};
@@ -200,54 +193,78 @@ function loadFossil() {
 
 // --- Idle Detection ---
 
-function onPointerMove(e) {
   let rect = canvas.getBoundingClientRect();
   lastCursor.x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
   lastCursor.y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
   lastMoveTime = Date.now();
   idle = false;
-  if (soundOn && windOsc) {
-    let freq = lerp(220, 440, lastCursor.x / width);
-    windOsc.frequency.setTargetAtTime(freq, audioCtx.currentTime, 0.1);
-  }
 }
-function onPointerDown(e) {
   dragging = true;
   onPointerMove(e);
+  grooveLast = {x: lastCursor.x, y: lastCursor.y};
   rakeAt(lastCursor.x, lastCursor.y, true);
 }
-function onPointerUp(e) {
   dragging = false;
+  grooveLast = null;
 }
-function onPointerDrag(e) {
   if (dragging) {
     onPointerMove(e);
+    if (grooveLast) {
+      drawGroove(grooveLast.x, grooveLast.y, lastCursor.x, lastCursor.y);
+      let speed = Math.sqrt(Math.pow(lastCursor.x-grooveLast.x,2)+Math.pow(lastCursor.y-grooveLast.y,2));
+      if (speed > 8) {
+        playRakeChime();
+        spawnSandParticles(lastCursor.x, lastCursor.y, speed);
+      }
+    }
+    grooveLast = {x: lastCursor.x, y: lastCursor.y};
     rakeAt(lastCursor.x, lastCursor.y, true);
   }
 }
 
-function rakeAt(x, y, drawGroove = false) {
   for (let p of plants) p.interact('rake', {x, y});
   if (drawGroove && grooveCtx) {
-    grooveCtx.save();
-    grooveCtx.globalAlpha = 0.7;
-    grooveCtx.strokeStyle = GROOVE_COLOR;
-    grooveCtx.lineWidth = GROOVE_WIDTH;
-    grooveCtx.lineCap = 'round';
-    grooveCtx.beginPath();
-    grooveCtx.moveTo(x, y);
-    grooveCtx.lineTo(x + 0.1, y + 0.1); // dot for tap
-    grooveCtx.stroke();
-    grooveCtx.restore();
+    if (grooveLast) drawGroove(grooveLast.x, grooveLast.y, x, y);
   }
+}
+
+function drawGroove(x0, y0, x1, y1) {
+  if (!grooveBrushImg) grooveBrushImg = makeGrooveBrush();
+  grooveCtx.save();
+  grooveCtx.globalAlpha = GROOVE_SOFT;
+  grooveCtx.globalCompositeOperation = 'destination-out';
+  let dx = x1-x0, dy = y1-y0, dist = Math.sqrt(dx*dx+dy*dy);
+  let steps = Math.ceil(dist / (GROOVE_WIDTH*0.5));
+  for (let i=0; i<=steps; ++i) {
+    let t = i/steps;
+    let x = lerp(x0, x1, t), y = lerp(y0, y1, t);
+    grooveCtx.drawImage(grooveBrushImg, x-GROOVE_WIDTH/2, y-GROOVE_WIDTH/2);
+  }
+  grooveCtx.restore();
+  grooveCtx.globalCompositeOperation = 'source-over';
+}
+
+function makeGrooveBrush() {
+  let c = document.createElement('canvas');
+  c.width = c.height = GROOVE_WIDTH;
+  let g = c.getContext('2d');
+  let grad = g.createRadialGradient(GROOVE_WIDTH/2, GROOVE_WIDTH/2, 2, GROOVE_WIDTH/2, GROOVE_WIDTH/2, GROOVE_WIDTH/2);
+  grad.addColorStop(0, 'rgba(0,0,0,0.18)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = grad;
+  g.beginPath();
+  g.arc(GROOVE_WIDTH/2, GROOVE_WIDTH/2, GROOVE_WIDTH/2, 0, 2*Math.PI);
+  g.fill();
+  return c;
 }
 
 // --- Growth ---
 
-function tryGrow() {
   if (!idle) return;
   let PlantType = plantTypes[Math.floor(Math.random() * plantTypes.length)];
-  plants.push(new PlantType(lastCursor.x, lastCursor.y));
+  let plant = new PlantType(lastCursor.x, lastCursor.y);
+  plants.push(plant);
+  playBranchChime();
   saveGarden();
   idle = false;
   lastMoveTime = Date.now();
@@ -255,7 +272,6 @@ function tryGrow() {
 
 // --- Animation Loop ---
 
-function resize() {
   width = window.innerWidth;
   height = window.innerHeight;
   canvas.width = width;
@@ -286,7 +302,6 @@ function drawFadeIn() {
     requestAnimationFrame(drawFadeIn);
   }
 }
-function loop() {
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = CANVAS_BG;
   ctx.fillRect(0, 0, width, height);
@@ -294,6 +309,8 @@ function loop() {
   if (grooveCanvas) ctx.drawImage(grooveCanvas, 0, 0);
   drawFossils();
   drawPlants();
+  updateSandParticles();
+  drawSandParticles();
   let now = Date.now();
   if (!dragging && now - lastMoveTime > IDLE_TIME) {
     idle = true;
@@ -301,6 +318,46 @@ function loop() {
   }
   updatePlants(1000 / FPS);
   requestAnimationFrame(loop);
+}
+
+// --- Sand Particles ---
+function spawnSandParticles(x, y, speed) {
+  let n = Math.floor(randomBetween(3, 6));
+  for (let i = 0; i < n; ++i) {
+    let angle = randomBetween(-Math.PI/3, Math.PI/3);
+    let v = speed * randomBetween(0.12, 0.22);
+    sandParticles.push({
+      x, y,
+      vx: Math.cos(angle) * v,
+      vy: Math.sin(angle) * v - randomBetween(0.5, 1.2),
+      r: randomBetween(1.2, 2.2),
+      life: 0,
+      maxLife: randomBetween(0.7, 1.2)
+    });
+  }
+}
+function updateSandParticles() {
+  let dt = 1/FPS;
+  for (let p of sandParticles) {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy += 0.18; // gravity
+    p.vx *= 0.97;
+    p.vy *= 0.97;
+    p.life += dt;
+  }
+  sandParticles = sandParticles.filter(p => p.life < p.maxLife);
+}
+function drawSandParticles() {
+  ctx.save();
+  ctx.globalAlpha = 0.32;
+  ctx.fillStyle = '#e2d7b7';
+  for (let p of sandParticles) {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, 2*Math.PI);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 // --- Init ---
@@ -331,51 +388,81 @@ function setup() {
   canvas.addEventListener('drag', onPointerDrag);
   window.addEventListener('beforeunload', saveGarden);
 
-  // Sound toggle button
-  let btn = document.createElement('button');
-  btn.textContent = 'Toggle Sound';
-  btn.id = 'sound-toggle';
-  btn.style.position = 'fixed';
-  btn.style.top = '18px';
-  btn.style.right = '24px';
-  btn.style.zIndex = 10;
-  btn.style.background = '#fff8';
-  btn.style.border = 'none';
-  btn.style.borderRadius = '8px';
-  btn.style.padding = '8px 18px';
-  btn.style.fontSize = '1.1em';
-  btn.style.cursor = 'pointer';
-  btn.style.boxShadow = '0 2px 8px #0001';
-  btn.style.transition = 'background 0.2s';
-  btn.addEventListener('mouseenter', () => btn.style.background = '#fff');
-  btn.addEventListener('mouseleave', () => btn.style.background = '#fff8');
-  btn.addEventListener('click', toggleSound);
-  document.body.appendChild(btn);
 
-  requestAnimationFrame(loop);
-  setTimeout(drawFadeIn, 80);
-}
+    // Sound toggle button
+    let btn = document.createElement('button');
+    btn.textContent = 'Toggle Sound';
+    btn.id = 'sound-toggle';
+    btn.style.position = 'fixed';
+    btn.style.top = '18px';
+    btn.style.right = '24px';
+    btn.style.zIndex = 10;
+    btn.style.background = '#fff8';
+    btn.style.border = 'none';
+    btn.style.borderRadius = '8px';
+    btn.style.padding = '8px 18px';
+    btn.style.fontSize = '1.1em';
+    btn.style.cursor = 'pointer';
+    btn.style.boxShadow = '0 2px 8px #0001';
+    btn.style.transition = 'background 0.2s';
+    btn.addEventListener('mouseenter', () => btn.style.background = '#fff');
+    btn.addEventListener('mouseleave', () => btn.style.background = '#fff8');
+    btn.addEventListener('click', toggleSound);
+    document.body.appendChild(btn);
 
-function toggleSound() {
-  soundOn = !soundOn;
-  let btn = document.getElementById('sound-toggle');
-  btn.textContent = soundOn ? 'Sound: On' : 'Sound: Off';
-  if (soundOn) {
-    if (!audioCtx) {
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      windOsc = audioCtx.createOscillator();
-      windOsc.type = 'sine';
-      windGain = audioCtx.createGain();
-      windGain.gain.value = 0.13;
-      windOsc.connect(windGain).connect(audioCtx.destination);
-      windOsc.frequency.value = 320;
-      windOsc.start();
-    } else {
-      windGain.gain.value = 0.13;
-    }
-  } else {
-    if (windGain) windGain.gain.value = 0;
+    requestAnimationFrame(loop);
+    setTimeout(drawFadeIn, 80);
   }
-}
+
+  // --- Pentatonic Chime Sound ---
+  const PENTATONIC = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25];
+  function playBranchChime() {
+    if (!soundOn) return;
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    let osc = audioCtx.createOscillator();
+    let gain = audioCtx.createGain();
+    let reverb = audioCtx.createConvolver();
+    reverb.buffer = makeImpulseResponse(audioCtx, 1.2, 2.2);
+    osc.type = 'triangle';
+    osc.frequency.value = PENTATONIC[Math.floor(Math.random()*PENTATONIC.length)];
+    gain.gain.value = 0.13;
+    osc.connect(gain).connect(reverb).connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 1.2);
+    gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 1.2);
+  }
+  function playRakeChime() {
+    if (!soundOn) return;
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    let osc = audioCtx.createOscillator();
+    let gain = audioCtx.createGain();
+    let reverb = audioCtx.createConvolver();
+    reverb.buffer = makeImpulseResponse(audioCtx, 0.7, 1.7);
+    osc.type = 'sine';
+    osc.frequency.value = PENTATONIC[Math.floor(Math.random()*PENTATONIC.length)] * randomBetween(0.5, 1.5);
+    gain.gain.value = 0.09;
+    osc.connect(gain).connect(reverb).connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.7);
+    gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.7);
+  }
+  function makeImpulseResponse(ctx, duration, decay) {
+    let rate = ctx.sampleRate;
+    let length = rate * duration;
+    let impulse = ctx.createBuffer(2, length, rate);
+    for (let c = 0; c < 2; ++c) {
+      let ch = impulse.getChannelData(c);
+      for (let i = 0; i < length; ++i) {
+        ch[i] = (Math.random()*2-1) * Math.pow(1-i/length, decay);
+      }
+    }
+    return impulse;
+  }
+
+  function toggleSound() {
+    soundOn = !soundOn;
+    let btn = document.getElementById('sound-toggle');
+    btn.textContent = soundOn ? 'Sound: On' : 'Sound: Off';
+  }
 
 window.onload = setup;
