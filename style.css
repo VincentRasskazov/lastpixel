@@ -1,0 +1,22 @@
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: #F0EAD6;
+  overflow: hidden;
+}
+
+#zen-canvas {
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: #F0EAD6;
+  cursor: pointer;
+}
+
+.fossil {
+  opacity: 0.15;
+}
