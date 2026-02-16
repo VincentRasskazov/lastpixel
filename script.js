@@ -192,21 +192,24 @@ function loadFossil() {
 }
 
 // --- Idle Detection ---
-
+function onPointerMove(e) {
   let rect = canvas.getBoundingClientRect();
   lastCursor.x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
   lastCursor.y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
   lastMoveTime = Date.now();
   idle = false;
 }
+function onPointerDown(e) {
   dragging = true;
   onPointerMove(e);
   grooveLast = {x: lastCursor.x, y: lastCursor.y};
   rakeAt(lastCursor.x, lastCursor.y, true);
 }
+function onPointerUp(e) {
   dragging = false;
   grooveLast = null;
 }
+function onPointerDrag(e) {
   if (dragging) {
     onPointerMove(e);
     if (grooveLast) {
@@ -221,7 +224,7 @@ function loadFossil() {
     rakeAt(lastCursor.x, lastCursor.y, true);
   }
 }
-
+function rakeAt(x, y, drawGroove = false) {
   for (let p of plants) p.interact('rake', {x, y});
   if (drawGroove && grooveCtx) {
     if (grooveLast) drawGroove(grooveLast.x, grooveLast.y, x, y);
@@ -259,7 +262,7 @@ function makeGrooveBrush() {
 }
 
 // --- Growth ---
-
+function tryGrow() {
   if (!idle) return;
   let PlantType = plantTypes[Math.floor(Math.random() * plantTypes.length)];
   let plant = new PlantType(lastCursor.x, lastCursor.y);
@@ -271,7 +274,7 @@ function makeGrooveBrush() {
 }
 
 // --- Animation Loop ---
-
+function resize() {
   width = window.innerWidth;
   height = window.innerHeight;
   canvas.width = width;
@@ -302,6 +305,7 @@ function drawFadeIn() {
     requestAnimationFrame(drawFadeIn);
   }
 }
+function loop() {
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = CANVAS_BG;
   ctx.fillRect(0, 0, width, height);
