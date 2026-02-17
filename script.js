@@ -1,138 +1,152 @@
-// The Last Pixel - Survival Falling Sand Game
+// The Last Pixel - Falling Sand Simulation
 const W = 120, H = 80, SCALE = 8;
-const EMPTY = 0, SAND = 1, LAVA = 2, GLASS = 3, PLAYER = 4;
-const COLORS = ["#000", "#d2b48c", "#ff4500", "#a8d1df", "#00ffff"];
+const EMPTY = 0, SAND = 1, LAVA = 2, PLAYER = 3;
+const COLORS = ["#000", "#d2b48c", "#ff4500", "#00ffff"];
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 canvas.width = W * SCALE;
 canvas.height = H * SCALE;
 canvas.style.width = "100vw";
 canvas.style.height = "100vh";
-let grid, next, timer, running, player, survived, lavaTimer, worldTimer;
 const hud = document.getElementById("hud");
 const gameover = document.getElementById("gameover");
 const restartBtn = document.getElementById("restart");
 
+let grid, player, running, timer, lavaTimer;
+
 function reset() {
   grid = Array.from({length: H}, () => Array(W).fill(EMPTY));
-  next = Array.from({length: H}, () => Array(W).fill(EMPTY));
-  player = {x: W>>1, y: 2, vy: 0, onGround: false};
-  for (let y=10; y<H-10; ++y) for (let x=0; x<W; ++x)
-    if (Math.random()<0.12) grid[y][x]=SAND;
-  grid[player.y][player.x]=PLAYER;
-  timer=0; survived=0; running=true; lavaTimer=0; worldTimer=0;
-  gameover.style.display="none";
+  // Fill sand
+  for (let y = 10; y < H - 10; ++y) {
+    for (let x = 0; x < W; ++x) {
+      if (Math.random() < 0.12) grid[y][x] = SAND;
+    }
+  }
+  // Place player
+  player = {x: W >> 1, y: 2, vy: 0, onGround: false};
+  grid[player.y][player.x] = PLAYER;
+  running = true;
+  timer = 0;
+  lavaTimer = 0;
+  gameover.style.display = "none";
 }
 
 function spawnLava() {
-  for (let x=0; x<W; ++x)
-    if (Math.random()<0.7) grid[0][x]=LAVA;
+  for (let x = 0; x < W; ++x) {
+    if (Math.random() < 0.7) grid[0][x] = LAVA;
+  }
 }
 
-function clearSandKeepGlass() {
-  for (let y=0; y<H; ++y) for (let x=0; x<W; ++x)
-    if (grid[y][x]===SAND) grid[y][x]=EMPTY;
-}
-
-function update() {
-  // Copy grid to next
-  for (let y=0; y<H; ++y) for (let x=0; x<W; ++x) next[y][x]=grid[y][x];
-  // Physics: Sand, Lava, Glass
-  for (let y=H-2; y>=0; --y) for (let x=0; x<W; ++x) {
-    let t=grid[y][x];
-    if (t===SAND||t===LAVA) {
-      let below=grid[y+1][x];
-      if (below===EMPTY) {
-        next[y][x]=EMPTY; next[y+1][x]=t;
-      } else if (t===LAVA && below===SAND) {
-        next[y][x]=EMPTY; next[y+1][x]=GLASS;
-      } else {
-        let dirs=[-1,1];
-        for (let d of dirs) {
-          let nx=x+d, ny=y+1;
-          if (nx>=0&&nx<W&&grid[ny][nx]===EMPTY) {
-            next[y][x]=EMPTY; next[ny][nx]=t; break;
-          } else if (t===LAVA && nx>=0&&nx<W&&grid[ny][nx]===SAND) {
-            next[y][x]=EMPTY; next[ny][nx]=GLASS; break;
+function updateSandAndLava() {
+  // Move sand and lava
+  for (let y = H - 2; y >= 0; --y) {
+    for (let x = 0; x < W; ++x) {
+      let t = grid[y][x];
+      if (t === SAND || t === LAVA) {
+        let below = grid[y + 1][x];
+        if (below === EMPTY) {
+          grid[y][x] = EMPTY;
+          grid[y + 1][x] = t;
+        } else {
+          let dirs = [-1, 1];
+          for (let d of dirs) {
+            let nx = x + d;
+            if (nx >= 0 && nx < W && grid[y + 1][nx] === EMPTY) {
+              grid[y][x] = EMPTY;
+              grid[y + 1][nx] = t;
+              break;
+            }
           }
         }
       }
     }
   }
-  // Player physics
-  let {x, y, vy}=player;
-  let below=next[y+1]?.[x];
-  player.onGround = (below!==undefined && below!==EMPTY && below!==LAVA);
-  if (!player.onGround) player.vy+=0.18;
-  else player.vy=0;
-  if (player.vy>1.5) player.vy=1.5;
-  let ny = Math.min(H-1, Math.round(player.y+player.vy));
-  // Check collision
-  if (next[ny][x]===EMPTY||next[ny][x]===SAND||next[ny][x]===GLASS) {
-    if (next[ny][x]===SAND) next[ny][x]=EMPTY;
-    next[player.y][player.x]=EMPTY;
-    player.y=ny;
-  } else if (next[ny][x]===LAVA) {
-    running=false;
-    next[player.y][player.x]=EMPTY;
-    player.y=ny;
+}
+
+function updatePlayer() {
+  // Gravity
+  let below = grid[player.y + 1]?.[player.x];
+  player.onGround = (below !== undefined && below !== EMPTY && below !== LAVA);
+  if (!player.onGround) player.vy += 0.18;
+  else player.vy = 0;
+  if (player.vy > 1.5) player.vy = 1.5;
+  let ny = Math.min(H - 1, Math.round(player.y + player.vy));
+  // Collision
+  let nextCell = grid[ny][player.x];
+  if (nextCell === EMPTY || nextCell === SAND) {
+    if (nextCell === SAND) grid[ny][player.x] = EMPTY;
+    grid[player.y][player.x] = EMPTY;
+    player.y = ny;
+  } else if (nextCell === LAVA) {
+    running = false;
+    grid[player.y][player.x] = EMPTY;
+    player.y = ny;
   }
-  next[player.y][player.x]=PLAYER;
-  // Swap grids
-  [grid,next]=[next,grid];
+  grid[player.y][player.x] = PLAYER;
 }
 
 function draw() {
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  for (let y=0; y<H; ++y) for (let x=0; x<W; ++x) {
-    let t=grid[y][x];
-    if (t===EMPTY) continue;
-    ctx.save();
-    ctx.fillStyle=COLORS[t];
-    if (t===LAVA) {
-      ctx.shadowColor="#ff4500";
-      ctx.shadowBlur=8;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  for (let y = 0; y < H; ++y) {
+    for (let x = 0; x < W; ++x) {
+      let t = grid[y][x];
+      if (t === EMPTY) continue;
+      ctx.save();
+      ctx.fillStyle = COLORS[t];
+      if (t === LAVA) {
+        ctx.shadowColor = "#ff4500";
+        ctx.shadowBlur = 8;
+      }
+      ctx.fillRect(x * SCALE, y * SCALE, SCALE, SCALE);
+      ctx.restore();
     }
-    ctx.fillRect(x*SCALE,y*SCALE,SCALE,SCALE);
-    ctx.restore();
   }
 }
 
 function renderHUD() {
-  hud.textContent = `Time Survived: ${survived.toFixed(1)}s`;
+  hud.textContent = `Time Survived: ${timer.toFixed(1)}s`;
 }
 
-function loop(ts) {
+function loop() {
   if (!running) {
-    gameover.style.display="flex";
+    gameover.style.display = "flex";
     return;
   }
-  update();
+  updateSandAndLava();
+  updatePlayer();
   draw();
   renderHUD();
-  timer+=1/60; lavaTimer+=1/60; worldTimer+=1/60;
-  survived=timer;
-  if (lavaTimer>=10) { spawnLava(); lavaTimer=0; }
-  if (worldTimer>=30) { clearSandKeepGlass(); worldTimer=0; }
-  if (player.y>=H-1) running=false;
+  timer += 1 / 60;
+  lavaTimer += 1 / 60;
+  if (lavaTimer >= 10) {
+    spawnLava();
+    lavaTimer = 0;
+  }
   requestAnimationFrame(loop);
 }
 
-document.addEventListener("keydown",e=>{
+document.addEventListener("keydown", e => {
   if (!running) return;
-  let k=e.key.toLowerCase();
-  if ((k==="arrowleft"||k==="a")&&player.x>0&&grid[player.y][player.x-1]===EMPTY) {
-    grid[player.y][player.x]=EMPTY; player.x--; grid[player.y][player.x]=PLAYER;
+  let k = e.key.toLowerCase();
+  if ((k === "arrowleft" || k === "a") && player.x > 0 && grid[player.y][player.x - 1] === EMPTY) {
+    grid[player.y][player.x] = EMPTY;
+    player.x--;
+    grid[player.y][player.x] = PLAYER;
   }
-  if ((k==="arrowright"||k==="d")&&player.x<W-1&&grid[player.y][player.x+1]===EMPTY) {
-    grid[player.y][player.x]=EMPTY; player.x++; grid[player.y][player.x]=PLAYER;
+  if ((k === "arrowright" || k === "d") && player.x < W - 1 && grid[player.y][player.x + 1] === EMPTY) {
+    grid[player.y][player.x] = EMPTY;
+    player.x++;
+    grid[player.y][player.x] = PLAYER;
   }
-  if ((k==="arrowup"||k==="w")&&player.onGround) {
-    player.vy=-2.2;
+  if ((k === "arrowup" || k === "w") && player.onGround) {
+    player.vy = -2.2;
   }
 });
 
-restartBtn.onclick=()=>{reset();requestAnimationFrame(loop);};
+restartBtn.onclick = () => {
+  reset();
+  requestAnimationFrame(loop);
+};
 
 reset();
 requestAnimationFrame(loop);
