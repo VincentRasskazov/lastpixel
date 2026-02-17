@@ -16,13 +16,11 @@ let grid, player, running, timer, lavaTimer;
 
 function reset() {
   grid = Array.from({length: H}, () => Array(W).fill(EMPTY));
-  // Fill sand
   for (let y = 10; y < H - 10; ++y) {
     for (let x = 0; x < W; ++x) {
       if (Math.random() < 0.12) grid[y][x] = SAND;
     }
   }
-  // Place player
   player = {x: W >> 1, y: 2, vy: 0, onGround: false};
   grid[player.y][player.x] = PLAYER;
   running = true;
@@ -38,7 +36,6 @@ function spawnLava() {
 }
 
 function updateSandAndLava() {
-  // Move sand and lava
   for (let y = H - 2; y >= 0; --y) {
     for (let x = 0; x < W; ++x) {
       let t = grid[y][x];
@@ -64,14 +61,12 @@ function updateSandAndLava() {
 }
 
 function updatePlayer() {
-  // Gravity
   let below = grid[player.y + 1]?.[player.x];
   player.onGround = (below !== undefined && below !== EMPTY && below !== LAVA);
   if (!player.onGround) player.vy += 0.18;
   else player.vy = 0;
   if (player.vy > 1.5) player.vy = 1.5;
   let ny = Math.min(H - 1, Math.round(player.y + player.vy));
-  // Collision
   let nextCell = grid[ny][player.x];
   if (nextCell === EMPTY || nextCell === SAND) {
     if (nextCell === SAND) grid[ny][player.x] = EMPTY;
