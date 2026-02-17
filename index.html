@@ -2,38 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>The Last Pixel</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <canvas id="gameCanvas"></canvas>
-  <div id="hud"></div>
-    <div id="gameOver" style="display:none;">
+  <div id="hud">Time Survived: <span id="time">0</span>s</div>
+  <canvas id="gameCanvas" width="100" height="100"></canvas>
+  <div id="gameOver" style="display:none;">
     <div class="overlay">
-        <span id="gameOverText">Game Over</span>
-        <button id="restartBtn">Restart</button>
+      <h1>Game Over</h1>
+      <button id="restartBtn">Restart</button>
     </div>
-  </div>
-  <script src="script.js"></script>
-</body>
-</html>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Stillness Zen Garden</title>
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
-  <canvas id="zen-canvas"></canvas>
-  <div id="info">
-    <svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="11" cy="11" r="10" stroke="#e0d7c6" stroke-width="1.5" fill="none"/>
-      <text x="11" y="16" text-anchor="middle" font-size="13" fill="#e0d7c6" font-family="serif">i</text>
-    </svg>
-    <span id="info-tooltip">Stillness creates growth</span>
   </div>
   <script src="script.js"></script>
 </body>
