@@ -1,4 +1,167 @@
-// The Last Pixel - Falling Sand Simulation
+// The Last Pixel - Cellular Automata Survival
+const SIZE = 120, SCALE = 8;
+const EMPTY = 0, SAND = 1, LAVA = 2, GLASS = 3, PLAYER = 4;
+const COLORS = ["#000", "#d2b48c", "#ff4500", "#a8d1df", "#00ffff"];
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+canvas.width = SIZE * SCALE;
+canvas.height = SIZE * SCALE;
+canvas.style.width = "100vw";
+canvas.style.height = "100vh";
+const hud = document.getElementById("hud");
+const gameOver = document.getElementById("gameover");
+const restartBtn = document.getElementById("restart");
+
+let grid, player, running, timer, lavaTimer;
+
+function reset() {
+  grid = Array.from({length: SIZE}, () => Array(SIZE).fill(EMPTY));
+  for (let y = 10; y < SIZE - 10; ++y)
+    for (let x = 0; x < SIZE; ++x)
+      if (Math.random() < 0.12) grid[y][x] = SAND;
+  player = {x: SIZE >> 1, y: 2, vy: 0, onGround: false};
+  grid[player.y][player.x] = PLAYER;
+  running = true;
+  timer = 0;
+  lavaTimer = 0;
+  gameOver.style.display = "none";
+}
+
+function spawnLavaStorm() {
+  for (let x = 0; x < SIZE; ++x)
+    grid[0][x] = LAVA;
+}
+
+function updateGrid() {
+  // Sand & Lava
+  for (let y = SIZE - 2; y >= 0; --y) {
+    for (let x = 0; x < SIZE; ++x) {
+      let t = grid[y][x];
+      if (t === SAND || t === LAVA) {
+        let below = grid[y + 1][x];
+        if (below === EMPTY) {
+          grid[y][x] = EMPTY;
+          grid[y + 1][x] = t;
+        } else if (t === LAVA && below === SAND) {
+          grid[y][x] = EMPTY;
+          grid[y + 1][x] = GLASS;
+        } else {
+          let dirs = [Math.random() < 0.5 ? -1 : 1, Math.random() < 0.5 ? 1 : -1];
+          for (let d of dirs) {
+            let nx = x + d;
+            if (nx >= 0 && nx < SIZE) {
+              let diag = grid[y + 1][nx];
+              if (diag === EMPTY) {
+                grid[y][x] = EMPTY;
+                grid[y + 1][nx] = t;
+                break;
+              } else if (t === LAVA && diag === SAND) {
+                grid[y][x] = EMPTY;
+                grid[y + 1][nx] = GLASS;
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+function updatePlayer() {
+  let below = grid[player.y + 1]?.[player.x];
+  player.onGround = (below !== undefined && below !== EMPTY && below !== LAVA);
+  if (!player.onGround) player.vy += 0.18;
+  else player.vy = 0;
+  if (player.vy > 1.5) player.vy = 1.5;
+  let ny = Math.min(SIZE - 1, Math.round(player.y + player.vy));
+  let nextCell = grid[ny][player.x];
+  if (nextCell === EMPTY || nextCell === SAND || nextCell === GLASS) {
+    if (nextCell === SAND) grid[ny][player.x] = EMPTY;
+    grid[player.y][player.x] = EMPTY;
+    player.y = ny;
+  } else if (nextCell === LAVA) {
+    running = false;
+    grid[player.y][player.x] = EMPTY;
+    player.y = ny;
+  }
+  grid[player.y][player.x] = PLAYER;
+}
+
+function checkDeath() {
+  for (let dx = -1; dx <= 1; ++dx)
+    for (let dy = -1; dy <= 1; ++dy) {
+      let nx = player.x + dx, ny = player.y + dy;
+      if (nx >= 0 && nx < SIZE && ny >= 0 && ny < SIZE)
+        if (grid[ny][nx] === LAVA) running = false;
+    }
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  for (let y = 0; y < SIZE; ++y)
+    for (let x = 0; x < SIZE; ++x) {
+      let t = grid[y][x];
+      if (t === EMPTY) continue;
+      ctx.save();
+      ctx.fillStyle = COLORS[t];
+      if (t === LAVA) {
+        ctx.shadowColor = "#ff4500";
+        ctx.shadowBlur = 8;
+      }
+      ctx.fillRect(x * SCALE, y * SCALE, SCALE, SCALE);
+      ctx.restore();
+    }
+}
+
+function renderHUD() {
+  hud.textContent = `Time Survived: ${timer.toFixed(1)}s`;
+}
+
+function loop() {
+  if (!running) {
+    gameOver.style.display = "flex";
+    return;
+  }
+  updateGrid();
+  updatePlayer();
+  checkDeath();
+  draw();
+  renderHUD();
+  timer += 1 / 60;
+  lavaTimer += 1 / 60;
+  if (lavaTimer >= 10) {
+    spawnLavaStorm();
+    lavaTimer = 0;
+  }
+  requestAnimationFrame(loop);
+}
+
+document.addEventListener("keydown", e => {
+  if (!running) return;
+  let k = e.key.toLowerCase();
+  if ((k === "arrowleft" || k === "a") && player.x > 0 && grid[player.y][player.x - 1] === EMPTY) {
+    grid[player.y][player.x] = EMPTY;
+    player.x--;
+    grid[player.y][player.x] = PLAYER;
+  }
+  if ((k === "arrowright" || k === "d") && player.x < SIZE - 1 && grid[player.y][player.x + 1] === EMPTY) {
+    grid[player.y][player.x] = EMPTY;
+    player.x++;
+    grid[player.y][player.x] = PLAYER;
+  }
+  if ((k === "arrowup" || k === "w") && player.onGround) {
+    player.vy = -2.2;
+  }
+});
+
+restartBtn.onclick = () => {
+  reset();
+  requestAnimationFrame(loop);
+};
+
+reset();
+requestAnimationFrame(loop);
 const W = 120, H = 80, SCALE = 8;
 const EMPTY = 0, SAND = 1, LAVA = 2, PLAYER = 3;
 const COLORS = ["#000", "#d2b48c", "#ff4500", "#00ffff"];
